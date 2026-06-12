@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>GLCM Tomato Ripeness Classifier</title>
+<link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🍅</div>
+    <span>GLCM Tomato Classifier</span>
+  </div>
+  <span class="badge">KNN · K=5</span>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('predict', this)">🔍 Prediksi</div>
+  <div class="tab" onclick="switchTab('eval', this)">📊 Evaluasi</div>
+  <div class="tab" onclick="switchTab('dataset', this)">🗃️ Dataset</div>
+  <div class="tab" onclick="switchTab('about', this)">📖 Tentang</div>
+</div>
+
+<!-- PREDICT PANEL -->
+<div class="panel active" id="panel-predict">
+  <div class="hero">
+    <div class="hero-tag">Pengolahan Citra · GLCM</div>
+    <h1>Klasifikasi Kematangan <span>Tomat</span></h1>
+    <p>Upload foto tomat atau masukkan nilai fitur GLCM secara manual untuk mengklasifikasikan apakah tomat sudah <strong>matang (ripe)</strong> atau <strong>belum matang (unripe)</strong> menggunakan algoritma KNN.</p>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-val green" id="st-acc">—</div>
+      <div class="stat-label">Akurasi KNN</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val blue">329</div>
+      <div class="stat-label">Data Training</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val yellow">110</div>
+      <div class="stat-label">Data Testing</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val blue" id="st-k">5</div>
+      <div class="stat-label">Nilai K (Tetangga)</div>
+    </div>
+  </div>
+
+  <!-- K SELECTOR -->
+  <div class="card">
+    <div class="card-title">Parameter K (KNN)</div>
+    <div class="k-selector" id="k-selector">
+      <button class="k-btn" onclick="setK(1)">K=1</button>
+      <button class="k-btn" onclick="setK(3)">K=3</button>
+      <button class="k-btn active" onclick="setK(5)">K=5</button>
+      <button class="k-btn" onclick="setK(7)">K=7</button>
+      <button class="k-btn" onclick="setK(9)">K=9</button>
+      <button class="k-btn" onclick="setK(11)">K=11</button>
+    </div>
+  </div>
+
+  <!-- UPLOAD IMAGE -->
+  <div class="card">
+    <div class="card-title">Upload Gambar Tomat</div>
+    <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
+      <div class="upload-inner" id="upload-inner">
+        <div class="upload-icon">🍅</div>
+        <div class="upload-title">Klik atau drag & drop gambar tomat</div>
+        <div class="upload-sub">JPG, PNG, JPEG · Maks 10MB</div>
+      </div>
+      <img id="preview-img" class="preview-img" style="display:none"/>
+    </div>
+    <input type="file" id="file-input" accept="image/*" style="display:none" onchange="handleFile(this.files[0])"/>
+
+    <div style="display:flex;gap:12px;margin-top:16px">
+      <button class="btn-predict" id="btn-upload-predict" onclick="predictFromImage()" style="display:none">
+        🔍 Analisis Gambar
+      </button>
+      <button class="btn-reset" id="btn-reset" onclick="resetUpload()" style="display:none">
+        ✕ Reset
+      </button>
+    </div>
+  </div>
+
+  <!-- MANUAL INPUT -->
+  <div class="card">
+    <div class="card-title">Input Manual Fitur GLCM</div>
+    <div class="input-grid">
+      <div class="input-group">
+        <label>Contrast</label>
+        <div class="input-row">
+          <input type="range" id="sl-contrast" min="1" max="240" step="0.1" value="20" oninput="syncInput('contrast','sl-contrast')"/>
+          <input type="number" id="num-contrast" value="20" step="0.001" onchange="syncSlider('contrast','num-contrast')"/>
+        </div>
+        <div class="feat-desc">Ukuran perbedaan intensitas piksel tetangga. Tinggi = tekstur kasar.</div>
+      </div>
+      <div class="input-group">
+        <label>Correlation</label>
+        <div class="input-row">
+          <input type="range" id="sl-correlation" min="0.95" max="1.0" step="0.0001" value="0.9965" oninput="syncInput('correlation','sl-correlation')"/>
+          <input type="number" id="num-correlation" value="0.9965" step="0.0001" onchange="syncSlider('correlation','num-correlation')"/>
+        </div>
+        <div class="feat-desc">Keterkaitan linear intensitas piksel. Mendekati 1 = sangat berkorelasi.</div>
+      </div>
+      <div class="input-group">
+        <label>Energy</label>
+        <div class="input-row">
+          <input type="range" id="sl-energy" min="0.015" max="0.075" step="0.0001" value="0.035" oninput="syncInput('energy','sl-energy')"/>
+          <input type="number" id="num-energy" value="0.035" step="0.0001" onchange="syncSlider('energy','num-energy')"/>
+        </div>
+        <div class="feat-desc">Keseragaman tekstur. Tinggi = tekstur homogen/seragam.</div>
+      </div>
+      <div class="input-group">
+        <label>Homogeneity</label>
+        <div class="input-row">
+          <input type="range" id="sl-homogeneity" min="0.2" max="0.8" step="0.001" value="0.5" oninput="syncInput('homogeneity','sl-homogeneity')"/>
+          <input type="number" id="num-homogeneity" value="0.5" step="0.001" onchange="syncSlider('homogeneity','num-homogeneity')"/>
+        </div>
+        <div class="feat-desc">Kedekatan distribusi elemen ke diagonal. Tinggi = tekstur seragam.</div>
+      </div>
+    </div>
+    <button class="btn-predict" onclick="predictManual()">🔍 Klasifikasikan (Manual)</button>
+  </div>
+
+  <!-- RESULT -->
+  <div class="notice" id="app-notice" style="display:none"></div>
+  <div class="result-box" id="result-box" style="display:none">
+    <div class="result-top">
+      <div id="result-img-wrap"></div>
+      <div class="result-info">
+        <div class="result-emoji" id="result-emoji"></div>
+        <div class="result-label" id="result-label"></div>
+        <div class="result-conf" id="result-conf"></div>
+        <div class="result-feats" id="result-feats"></div>
+      </div>
+    </div>
+    <div class="result-neighbors" id="result-neighbors"></div>
+  </div>
+
+  <!-- CONTOH -->
+  <div class="card">
+    <div class="card-title">Coba Contoh Data</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <button class="page-btn" onclick="loadExample('ripe1')">🍅 Ripe — Contrast Rendah</button>
+      <button class="page-btn" onclick="loadExample('ripe2')">🍅 Ripe — Homogeneity Tinggi</button>
+      <button class="page-btn" onclick="loadExample('unripe1')">🟢 Unripe — Contrast Tinggi</button>
+      <button class="page-btn" onclick="loadExample('unripe2')">🟢 Unripe — Correlation Rendah</button>
+    </div>
+  </div>
+</div>
+
+<!-- EVAL PANEL -->
+<div class="panel" id="panel-eval">
+  <div class="card">
+    <div class="card-title">Pilih Nilai K</div>
+    <div class="k-selector">
+      <button class="k-btn" onclick="runEval(1)">K=1</button>
+      <button class="k-btn" onclick="runEval(3)">K=3</button>
+      <button class="k-btn active" onclick="runEval(5)">K=5</button>
+      <button class="k-btn" onclick="runEval(7)">K=7</button>
+      <button class="k-btn" onclick="runEval(9)">K=9</button>
+      <button class="k-btn" onclick="runEval(11)">K=11</button>
+    </div>
+  </div>
+  <div class="eval-grid">
+    <div class="card">
+      <div class="card-title">Confusion Matrix</div>
+      <div class="confusion-matrix" id="cm-grid"></div>
+    </div>
+    <div class="card">
+      <div class="acc-big">
+        <div class="num" id="eval-acc">—</div>
+        <div class="unit">% Akurasi</div>
+      </div>
+      <ul class="metric-list" id="metric-list"></ul>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Distribusi Fitur per Kelas (Tomat)</div>
+    <canvas id="featureChart" height="220"></canvas>
+  </div>
+  <div class="card">
+    <div class="card-title">Perbandingan Akurasi Berbagai K</div>
+    <canvas id="kChart" height="140"></canvas>
+  </div>
+</div>
+
+<!-- DATASET PANEL -->
+<div class="panel" id="panel-dataset">
+  <div class="card">
+    <div class="card-title">Informasi Dataset Tomat</div>
+    <div class="two-col">
+      <div>
+        <div class="stat-card" style="margin-bottom:12px">
+          <div id="train-total-val" class="stat-val green">329</div>
+          <div class="stat-label">Total Data Training</div>
+        </div>
+        <div class="bar-container">
+          <div class="bar-row"><span class="bar-label">Ripe</span><div class="bar-track"><div id="train-ripe-bar" class="bar-fill" style="width:47.1%;background:var(--ripe)"></div></div><span id="train-ripe-val" class="bar-val">155</span></div>
+          <div class="bar-row"><span class="bar-label">Unripe</span><div class="bar-track"><div id="train-unripe-bar" class="bar-fill" style="width:52.9%;background:var(--unripe)"></div></div><span id="train-unripe-val" class="bar-val">174</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="stat-card" style="margin-bottom:12px">
+          <div id="test-total-val" class="stat-val yellow">110</div>
+          <div class="stat-label">Total Data Testing</div>
+        </div>
+        <div class="bar-container">
+          <div class="bar-row"><span class="bar-label">Ripe</span><div class="bar-track"><div id="test-ripe-bar" class="bar-fill" style="width:50%;background:var(--ripe)"></div></div><span id="test-ripe-val" class="bar-val">55</span></div>
+          <div class="bar-row"><span class="bar-label">Unripe</span><div class="bar-track"><div id="test-unripe-bar" class="bar-fill" style="width:50%;background:var(--unripe)"></div></div><span id="test-unripe-val" class="bar-val">55</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Data Training</div>
+    <div class="search-row">
+      <input class="search-input" id="search-train" placeholder="Cari berdasarkan nilai..." oninput="renderTrainTable()"/>
+      <select class="filter-select" id="filter-train" onchange="renderTrainTable()">
+        <option value="all">Semua Kelas</option>
+        <option value="ripe">Ripe</option>
+        <option value="unripe">Unripe</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Contrast</th><th>Correlation</th><th>Energy</th><th>Homogeneity</th><th>Label</th></tr></thead>
+        <tbody id="train-tbody"></tbody>
+      </table>
+    </div>
+    <div class="pagination" id="train-pagination"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Hasil Prediksi Data Testing (K=5)</div>
+    <div class="search-row">
+      <input class="search-input" id="search-test" placeholder="Cari berdasarkan nilai..." oninput="renderTestTable()"/>
+      <select class="filter-select" id="filter-test" onchange="renderTestTable()">
+        <option value="all">Semua</option>
+        <option value="correct">Benar</option>
+        <option value="wrong">Salah</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Contrast</th><th>Correlation</th><th>Energy</th><th>Homogeneity</th><th>Label Asli</th><th>Prediksi</th><th>Status</th></tr></thead>
+        <tbody id="test-tbody"></tbody>
+      </table>
+    </div>
+    <div class="pagination" id="test-pagination"></div>
+  </div>
+</div>
+
+<!-- ABOUT PANEL -->
+<div class="panel" id="panel-about">
+  <div class="card">
+    <div class="card-title">Tentang Aplikasi</div>
+    <p style="color:var(--muted);line-height:1.8;font-size:0.9rem">
+      Aplikasi ini merupakan implementasi metode <strong style="color:var(--text)">Gray-Level Co-occurrence Matrix (GLCM)</strong> untuk ekstraksi fitur tekstur citra digital tomat, dikombinasikan dengan algoritma klasifikasi <strong style="color:var(--text)">K-Nearest Neighbor (KNN)</strong> untuk mengklasifikasikan kematangan tomat menjadi <span style="color:var(--ripe)"><strong>Ripe (Matang)</strong></span> atau <span style="color:var(--unripe)"><strong>Unripe (Belum Matang)</strong></span>.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Alur Sistem</div>
+    <div class="about-grid">
+      <div class="flow-step"><div class="flow-num">1</div><div class="flow-title">Input Citra Tomat</div><div class="flow-desc">User upload foto tomat (JPG/PNG). Citra diterima oleh backend Flask dan disiapkan untuk pemrosesan.</div></div>
+      <div class="flow-step"><div class="flow-num">2</div><div class="flow-title">Preprocessing</div><div class="flow-desc">Citra RGB dikonversi ke grayscale menggunakan OpenCV. Grayscale menghilangkan informasi warna agar analisis tekstur lebih fokus.</div></div>
+      <div class="flow-step"><div class="flow-num">3</div><div class="flow-title">Pembentukan GLCM</div><div class="flow-desc">GLCM dibentuk dengan parameter: distance=[1], angle=[0°], levels=256, symmetric=True, normed=True.</div></div>
+      <div class="flow-step"><div class="flow-num">4</div><div class="flow-title">Ekstraksi Fitur</div><div class="flow-desc">Dari GLCM diekstrak 4 fitur: Contrast, Correlation, Energy, dan Homogeneity menggunakan scikit-image.</div></div>
+      <div class="flow-step"><div class="flow-num">5</div><div class="flow-title">Klasifikasi KNN</div><div class="flow-desc">KNN mencari K tetangga terdekat menggunakan Euclidean distance pada ruang 4 dimensi fitur.</div></div>
+      <div class="flow-step"><div class="flow-num">6</div><div class="flow-title">Output Hasil</div><div class="flow-desc">Hasil prediksi (Ripe/Unripe) ditampilkan beserta confidence, nilai fitur GLCM, dan 3 tetangga terdekat.</div></div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">Formula Fitur GLCM</div>
+      <div class="formula-box">
+Contrast    = Σ (i-j)² · p(i,j)
+
+Correlation = Σ (i·j·p(i,j) - μᵢμⱼ) / σᵢσⱼ
+
+Energy      = Σ p(i,j)²
+
+Homogeneity = Σ p(i,j) / (1 + |i-j|)
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Jarak Euclidean (KNN)</div>
+      <div class="formula-box">
+d(x, y) = √(Σᵢ (xᵢ - yᵢ)²)
+
+Kelas mayoritas dari K tetangga
+terdekat = hasil prediksi
+
+Backend: Flask + scikit-image
+Frontend: Vanilla JS
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Cara Menjalankan Aplikasi</div>
+    <div class="formula-box" style="color:var(--text)">
+# Install dependencies
+pip install flask flask-cors opencv-python scikit-image numpy pandas
+
+# Jalankan server
+python app.py
+
+# Buka browser
+http://localhost:5000
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Informasi Tugas</div>
+    <ul class="metric-list">
+      <li><span class="metric-name">Mata Kuliah</span><span class="metric-val" style="color:var(--text)">Praktikum Pengolahan Citra</span></li>
+      <li><span class="metric-name">Instansi</span><span class="metric-val" style="color:var(--text)">Universitas Pakuan</span></li>
+      <li><span class="metric-name">Semester</span><span class="metric-val" style="color:var(--text)">Genap 2026</span></li>
+      <li><span class="metric-name">Topik</span><span class="metric-val" style="color:var(--text)">GLCM pada Citra Digital</span></li>
+      <li><span class="metric-name">Deadline</span><span class="metric-val" style="color:var(--yellow)">12 Juni 2026</span></li>
+    </ul>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="main.js"></script>
+</body>
+</html>
